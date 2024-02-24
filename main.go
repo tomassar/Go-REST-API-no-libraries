@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -135,6 +136,31 @@ func (h *projectHandlers) getProject(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonBytes)
 }
 
+type adminPortal struct {
+	password string
+}
+
+func newAdminPortal() *adminPortal {
+	password := os.Getenv("ADMIN_PASSWORD")
+	if password == "" {
+		panic("Required env var ADMIN PASSWORD")
+	}
+
+	return &adminPortal{
+		password: password,
+	}
+}
+
+func (a adminPortal) handler(w http.ResponseWriter, r *http.Request) {
+	user, pass, ok := r.BasicAuth()
+	if !ok || user != "admin" || pass != a.password {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	w.Write([]byte("<html><h1> Welcome to the admin dashboard </h1></html>"))
+}
+
 func newProjectHandlers() *projectHandlers {
 	return &projectHandlers{
 		db: map[string]OpenSourceProject{
@@ -165,12 +191,17 @@ func newProjectHandlers() *projectHandlers {
 		},
 	}
 }
+
 func main() {
 	fmt.Println("Start server")
 
 	openSourceHandlers := newProjectHandlers()
+	adminPortal := newAdminPortal()
+
 	http.HandleFunc("/opensource/projects", openSourceHandlers.projects)
 	http.HandleFunc("/opensource/projects/", openSourceHandlers.getProject)
+	http.HandleFunc("/admin", adminPortal.handler)
+
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic(err)
