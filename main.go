@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -104,6 +105,36 @@ func (h *projectHandlers) getAll(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonBytes)
 }
 
+func (h *projectHandlers) getProject(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.String(), "/")
+	if len(parts) != 4 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	id := parts[3]
+
+	h.Lock()
+	project, ok := h.db[id]
+	h.Unlock()
+
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	jsonBytes, err := json.Marshal(project)
+	fmt.Printf("json bytes: %v", jsonBytes)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Add("content-type", "application/json")
+	w.Write(jsonBytes)
+}
+
 func newProjectHandlers() *projectHandlers {
 	return &projectHandlers{
 		db: map[string]OpenSourceProject{
@@ -139,6 +170,7 @@ func main() {
 
 	openSourceHandlers := newProjectHandlers()
 	http.HandleFunc("/opensource/projects", openSourceHandlers.projects)
+	http.HandleFunc("/opensource/projects/", openSourceHandlers.getProject)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic(err)
